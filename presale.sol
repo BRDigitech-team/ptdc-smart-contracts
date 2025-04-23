@@ -269,7 +269,7 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
      * @dev To buy into a presale using USDT
      * @param usdAmount Usdt amount to buy tokens
      */
-    function buyWithUSDT(uint256 usdAmount , uint256 tokens)
+    function buyWithUSDT(uint256 usdAmount)
         external
         checkPresaleId(presaleId)
         checkSaleState(presaleId, usdtToTokens(presaleId, usdAmount))
@@ -280,34 +280,17 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         require(presale[presaleId].amountRaised + usdAmount <= presale[presaleId].UsdtHardcap,
         "Amount should be less than leftHardcap");
 
+        uint8 decimals = SaleToken.decimals();
+        uint256 tokenPrice = presale[presaleId].price; // calculate token price in eth
+        uint256 tokens = (usdAmount * (10**uint256(decimals))) / tokenPrice;
 
-        // uint256 tokens = usdtToTokens(presaleId, usdAmount);
-        
+
         presale[presaleId].Sold += tokens;
         presale[presaleId].amountRaised += usdAmount;
 
-        // if (isExcludeMinToken[msg.sender] == false) {
-        //     require(tokens >= MinTokenTobuy, "Less than min amount");
-        // }
         USDTInterface.safeTransferFrom(msg.sender, treasuryWallet, usdAmount);
-        // USDTInterface.transferFrom(msg.sender, treasuryWallet, usdAmount);
         SaleToken.safeTransferFrom(ownerWallet, msg.sender, tokens);
-        // SaleToken.transferFrom(ownerWallet, msg.sender, tokens);
 
-        // // uint256 ourAllowance = USDTInterface.allowance(
-        // //     _msgSender(),
-        // //     address(this)
-        // // );
-        // // require(usdAmount <= ourAllowance, "Make sure to add enough allowance");
-        // // (bool success, ) = address(USDTInterface).call(
-        // //     abi.encodeWithSignature(
-        // //         "transferFrom(address,address,uint256)",
-        // //         _msgSender(),
-        // //         fundReceiver,
-        // //         usdAmount
-        // //     )
-        // // );
-        // require(success, "Token payment failed");
         emit TokensBought(
             _msgSender(),
             presaleId,
@@ -322,7 +305,7 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
     /**
      * @dev To buy into a presale using ETH
      */
-    function buyWithETH(uint256 tokens)
+    function buyWithETH()
         external
         payable
         checkPresaleId(presaleId)
@@ -330,7 +313,8 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         nonReentrant
         returns (bool)
     {
-        
+        uint256 weiAmount = msg.value;
+
         uint256 usdAmount = (msg.value * getLatestPrice() * USDT_MULTIPLIER) / (ETH_MULTIPLIER * ETH_MULTIPLIER);
         require(presale[presaleId].amountRaised + usdAmount <= presale[presaleId].UsdtHardcap,
         "Amount should be less than leftHardcap");
@@ -338,10 +322,11 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         require(!paused[presaleId], "Presale paused");
         require(presale[presaleId].Active == true, "Presale is not active yet");
 
-        // uint256 tokens = usdtToTokens(presaleId, usdAmount);
-        // if (isExcludeMinToken[msg.sender] == false) {
-        //     require(tokens >= MinTokenTobuy, "Insufficient amount!");
-        // }
+        // calculate token amount to be created
+        uint8 decimals = SaleToken.decimals();
+        uint256 tokenPrice = _getTokenPriceInEth(presale[presaleId].price); // calculate token price in eth
+        uint256 tokens = (weiAmount * (10**uint256(decimals))) / tokenPrice;
+
         presale[presaleId].Sold += tokens;
         presale[presaleId].amountRaised += usdAmount;
 
@@ -433,6 +418,25 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
             "You can only unlock on finalize"
         );
     }
+
+    function _getTokenPriceInEth(uint256 _rate) internal view returns (uint256) {
+        uint256 ethPriceInUsd = uint256(getLatestPriceEth());
+        uint256 ethPriceinUSDT = ethPriceInUsd / 100;
+        uint256 tokenPriceInEth = _rate * (10 ** 18) / ethPriceinUSDT;
+        return tokenPriceInEth;
+    }
+
+    function getLatestPriceEth() public view returns (int) {
+        (
+            /*uint80 roundID*/,
+            int answer,
+            /*uint startedAt*/,
+            /*uint timeStamp*/,
+            /*uint80 answeredInRound*/
+        ) = aggregatorInterface.latestRoundData();
+        return answer;
+    }
+
 
     
 }
