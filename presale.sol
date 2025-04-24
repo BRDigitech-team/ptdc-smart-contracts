@@ -22,6 +22,7 @@ interface Aggregator {
 contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20Metadata;
 
+    uint16 public bonusBps = 2500; // 25%
     uint256 public presaleId;
     uint256 public USDT_MULTIPLIER;
     uint256 public ETH_MULTIPLIER;
@@ -205,6 +206,10 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         ownerWallet = _wallet;
     }
 
+    function changeBonusBps(uint16 _bonusBps) external onlyOwner {
+        bonusBps = _bonusBps;
+    }
+
     /**
      * @dev To update the USDT Token address
      * @param _newAddress Sale token address
@@ -265,6 +270,18 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         _;
     }
 
+    function getAmountWithBonus(uint256 amount)
+        internal
+        view
+        returns (uint256)
+    {
+        if (bonusBps == 0) {
+            return amount;
+        }
+        uint256 bonus = (amount * bonusBps) / 10000;
+        return amount + bonus;
+    }
+
     /**
      * @dev To buy into a presale using USDT
      * @param usdAmount Usdt amount to buy tokens
@@ -283,19 +300,19 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         uint8 decimals = SaleToken.decimals();
         uint256 tokenPrice = presale[presaleId].price; // calculate token price in eth
         uint256 tokens = (usdAmount * (10**uint256(decimals))) / tokenPrice;
+        uint256 tokensWithBonus = getAmountWithBonus(tokens);
 
-
-        presale[presaleId].Sold += tokens;
+        presale[presaleId].Sold += tokensWithBonus;
         presale[presaleId].amountRaised += usdAmount;
 
         USDTInterface.safeTransferFrom(msg.sender, treasuryWallet, usdAmount);
-        SaleToken.safeTransferFrom(ownerWallet, msg.sender, tokens);
+        SaleToken.safeTransferFrom(ownerWallet, msg.sender, tokensWithBonus);
 
         emit TokensBought(
             _msgSender(),
             presaleId,
             address(USDTInterface),
-            tokens,
+            tokensWithBonus,
             usdAmount,
             block.timestamp
         );
@@ -326,17 +343,18 @@ contract PayTheDebt_Sale is ReentrancyGuard, Ownable {
         uint8 decimals = SaleToken.decimals();
         uint256 tokenPrice = _getTokenPriceInEth(presale[presaleId].price); // calculate token price in eth
         uint256 tokens = (weiAmount * (10**uint256(decimals))) / tokenPrice;
+        uint256 tokensWithBonus = getAmountWithBonus(tokens);
 
-        presale[presaleId].Sold += tokens;
+        presale[presaleId].Sold += tokensWithBonus;
         presale[presaleId].amountRaised += usdAmount;
 
         sendValue(payable(treasuryWallet), msg.value);
-        SaleToken.safeTransferFrom(ownerWallet, msg.sender, tokens);
+        SaleToken.safeTransferFrom(ownerWallet, msg.sender, tokensWithBonus);
         emit TokensBought(
             _msgSender(),
             presaleId,
             address(0),
-            tokens,
+            tokensWithBonus,
             msg.value,
             block.timestamp
         );
